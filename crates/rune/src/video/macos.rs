@@ -668,6 +668,11 @@ impl Port for Av<'_> {
         unsafe { self.objects().player.setVolume(volume) };
     }
 
+    fn set_output_device(&mut self, uid: Option<&str>) {
+        let uid = uid.map(NSString::from_str);
+        unsafe { self.objects().player.setAudioOutputDeviceUniqueID(uid.as_deref()) };
+    }
+
     fn seek_to(&mut self, at: f64) {
         unsafe { self.objects().player.seekToTime_toleranceBefore_toleranceAfter(cm(at), zero(), zero()) };
     }

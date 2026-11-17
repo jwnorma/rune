@@ -695,6 +695,8 @@ enum Cmd {
     Park,
     Orient,
     Muted(bool),
+    /// Routed to a device (`true`) or back to the system output.
+    Output(bool),
     Seek(f64),
     Rate(f32),
     Restart(f32),
@@ -831,6 +833,9 @@ impl Port for Fake {
         self.log.push(Cmd::Muted(muted));
     }
     fn set_volume(&mut self, _: f32) {}
+    fn set_output_device(&mut self, uid: Option<&str>) {
+        self.log.push(Cmd::Output(uid.is_some()));
+    }
     fn seek_to(&mut self, at: f64) {
         self.log.push(Cmd::Seek(at));
     }
@@ -1201,4 +1206,23 @@ fn a_seek_that_never_lands_expires() {
     s.seek(1.0, true, now);
     s.expire(now + Duration::from_secs(60));
     assert_eq!(s, Settle::Holding { to: 1.0 });
+}
+
+#[test]
+fn an_output_device_change_reaches_the_player_once_and_a_new_player_gets_it_again() {
+    let now = Instant::now();
+    let mut c = Control::default();
+    c.muted = false;
+    c.stage = Stage::Loading { created: now, muted: false, volume: 1.0, output: 0 };
+    let effects = |c: &mut Control| step(c, Event::Reconcile { now }).into_iter().collect::<Vec<_>>();
+    assert!(!effects(&mut c).contains(&Effect::SetOutputDevice), "the system output needs no call");
+
+    c.output_device = Some("AppleUSBAudioEngine:DAC".into());
+    c.output_generation += 1;
+    assert!(effects(&mut c).contains(&Effect::SetOutputDevice));
+    assert!(!effects(&mut c).contains(&Effect::SetOutputDevice), "once");
+
+    // A new player starts on the system output, so the chosen device is applied again.
+    c.stage = Stage::Loading { created: now, muted: false, volume: 1.0, output: 0 };
+    assert!(effects(&mut c).contains(&Effect::SetOutputDevice));
 }
